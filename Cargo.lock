@@ -880,7 +880,6 @@ dependencies = [
 [[package]]
 name = "soroban-env-common"
 version = "0.0.9"
-source = "git+https://github.com/stellar/rs-soroban-env?rev=c04c2332#c04c2332fd3ed3ee0e4b72c68c618c7f45f44ba1"
 dependencies = [
  "soroban-env-macros",
  "soroban-wasmi",
@@ -891,7 +890,6 @@ dependencies = [
 [[package]]
 name = "soroban-env-guest"
 version = "0.0.9"
-source = "git+https://github.com/stellar/rs-soroban-env?rev=c04c2332#c04c2332fd3ed3ee0e4b72c68c618c7f45f44ba1"
 dependencies = [
  "soroban-env-common",
  "static_assertions",
@@ -900,7 +898,6 @@ dependencies = [
 [[package]]
 name = "soroban-env-host"
 version = "0.0.9"
-source = "git+https://github.com/stellar/rs-soroban-env?rev=c04c2332#c04c2332fd3ed3ee0e4b72c68c618c7f45f44ba1"
 dependencies = [
  "backtrace",
  "dyn-fmt",
@@ -923,7 +920,6 @@ dependencies = [
 [[package]]
 name = "soroban-env-macros"
 version = "0.0.9"
-source = "git+https://github.com/stellar/rs-soroban-env?rev=c04c2332#c04c2332fd3ed3ee0e4b72c68c618c7f45f44ba1"
 dependencies = [
  "itertools",
  "proc-macro2",
@@ -935,7 +931,6 @@ dependencies = [
 [[package]]
 name = "soroban-native-sdk-macros"
 version = "0.0.9"
-source = "git+https://github.com/stellar/rs-soroban-env?rev=c04c2332#c04c2332fd3ed3ee0e4b72c68c618c7f45f44ba1"
 dependencies = [
  "itertools",
  "proc-macro2",
@@ -1053,7 +1048,6 @@ dependencies = [
 [[package]]
 name = "stellar-xdr"
 version = "0.0.7"
-source = "git+https://github.com/stellar/rs-stellar-xdr?rev=e88f9fa7#e88f9fa7ab3d0f54efb5cee8499ef9080f4d41f4"
 dependencies = [
  "base64",
  "hex",
