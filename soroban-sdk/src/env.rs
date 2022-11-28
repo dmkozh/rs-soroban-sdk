@@ -40,7 +40,6 @@ pub use internal::ConversionError;
 pub use internal::EnvBase;
 pub use internal::FromVal;
 pub use internal::IntoVal;
-use internal::InvokerType;
 pub use internal::Object;
 pub use internal::RawVal;
 pub use internal::RawValConvertible;
@@ -50,9 +49,10 @@ pub use internal::TryFromVal;
 pub use internal::TryIntoVal;
 pub use internal::Val;
 
+use crate::temp_data::TempData;
 use crate::{
-    accounts::Accounts, address::Address, crypto::Crypto, deploy::Deployer, events::Events,
-    ledger::Ledger, logging::Logger, storage::Storage, AccountId, Bytes, BytesN, Vec,
+        data::Data, deploy::Deployer, events::Events, ledger::Ledger, logging::Logger, Account,
+    Address, Bytes, BytesN, Vec,
 };
 
 /// The [Env] type provides access to the environment the contract is executing
@@ -94,21 +94,6 @@ impl Env {
         unreachable!()
     }
 
-    /// Get the invoking [Address] of the current executing contract.
-    pub fn invoker(&self) -> Address {
-        let invoker_type: InvokerType = internal::Env::get_invoker_type(self)
-            .try_into()
-            .expect("unrecognized invoker type");
-        match invoker_type {
-            InvokerType::Account => Address::Account(unsafe {
-                AccountId::unchecked_new(self.clone(), internal::Env::get_invoking_account(self))
-            }),
-            InvokerType::Contract => Address::Contract(unsafe {
-                BytesN::unchecked_new(self.clone(), internal::Env::get_invoking_contract(self))
-            }),
-        }
-    }
-
     /// Get a [Storage] for accessing and update contract data that has been stored
     /// by the currently executing contract.
     #[inline(always)]
@@ -117,12 +102,19 @@ impl Env {
         self.storage()
     }
 
+    /// Get a [TempData] for accessing and updating temporary contract data.
+
     /// Get a [Storage] for accessing and update contract data that has been stored
     /// by the currently executing contract.
     #[inline(always)]
     pub fn storage(&self) -> Storage {
         Storage::new(self)
     }
+
+    #[inline(always)]
+    pub fn temp_data(&self) -> TempData {
+        TempData::new(self)
+    }    
 
     /// Get [Events] for publishing events associated with the
     /// currently executing contract.
@@ -137,12 +129,6 @@ impl Env {
         Ledger::new(self)
     }
 
-    /// Get an [Accounts] for accessing accounts in the current ledger.
-    #[inline(always)]
-    pub fn accounts(&self) -> Accounts {
-        Accounts::new(self)
-    }
-
     /// Get a deployer for deploying contracts.
     #[inline(always)]
     pub fn deployer(&self) -> Deployer {
@@ -154,17 +140,28 @@ impl Env {
     pub fn crypto(&self) -> Crypto {
         Crypto::new(self)
     }
-
-    /// Get the 32-byte hash identifier of the current executing contract.
-    pub fn current_contract(&self) -> BytesN<32> {
-        let id = internal::Env::get_current_contract(self);
-        unsafe { BytesN::<32>::unchecked_new(self.clone(), id) }
+    pub fn current_contract_account(&self) -> Account {
+        internal::Env::get_current_contract_account(self)
+            .try_into_val(self)
+            .unwrap()
     }
 
-    /// Get the 32-byte hash identifier of the current executing contract.
-    #[doc(hidden)]
-    pub fn get_current_contract(&self) -> BytesN<32> {
-        self.current_contract()
+    pub fn current_contract_id(&self) -> BytesN<32> {
+        internal::Env::get_current_contract_id(self)
+            .try_into_val(self)
+            .unwrap()
+    }
+
+    pub(crate) fn get_account_address(&self, account: &Account) -> Address {
+        internal::Env::get_account_address(self, account.to_object())
+            .try_into_val(self)
+            .unwrap()
+    }
+
+    pub(crate) fn authorize_account(&self, account: &Account, args: Vec<RawVal>) {
+        internal::Env::authorize_account(self, account.to_object(), args.to_object())
+            .try_into()
+            .unwrap()
     }
 
     /// Returns the contract call stack as a [`Vec`]
@@ -278,10 +275,7 @@ impl Env {
 }
 
 #[cfg(any(test, feature = "testutils"))]
-use crate::testutils::{
-    budget::Budget, random, AccountId as _, Accounts as _, BytesN as _, ContractFunctionSet,
-    Ledger as _,
-};
+use crate::testutils::{random, BytesN as _, ContractFunctionSet, Ledger as _};
 #[cfg(any(test, feature = "testutils"))]
 use soroban_ledger_snapshot::LedgerSnapshot;
 #[cfg(any(test, feature = "testutils"))]
@@ -319,6 +313,7 @@ impl Env {
         let env_impl = internal::EnvImpl::with_storage_and_budget(
             storage,
             internal::budget::Budget::default(),
+internal::auth::AuthorizationManager::new_recording(budget),
         );
 
         let env = Env {
@@ -472,7 +467,9 @@ impl Env {
             None
         };
         self.env_impl
-            .set_source_account(AccountId::random(self).try_into().unwrap());
+            .set_source_account(xdr::AccountId(xdr::PublicKey::PublicKeyTypeEd25519(
+                xdr::Uint256(random()),
+            )));
 
         let contract_id: BytesN<32> = self
             .env_impl
@@ -490,6 +487,26 @@ impl Env {
             self.env_impl.remove_source_account();
         }
         contract_id
+    }
+
+    pub fn verify_account_authorization(
+        &self,
+        account: &Account,
+        call_stack: &[(&BytesN<32>, &str)],
+        args: Vec<RawVal>,
+    ) -> bool {
+        let call_stack = call_stack
+            .iter()
+            .map(|(contract_id, fn_name)| {
+                (
+                    xdr::Hash(contract_id.to_array()),
+                    Symbol::try_from_str(fn_name).unwrap(),
+                )
+            })
+            .collect();
+        self.env_impl
+            .verify_account_authorization(account.to_object(), call_stack, args.to_object())
+            .unwrap()
     }
 
     fn register_contract_with_contract_id_and_source(
