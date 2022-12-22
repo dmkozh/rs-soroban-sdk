@@ -203,6 +203,7 @@ pub use envhidden::*;
 
 mod bytes;
 pub mod data;
+pub mod temp_data;
 pub mod deploy;
 pub mod events;
 pub mod iter;

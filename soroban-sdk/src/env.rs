@@ -49,6 +49,7 @@ pub use internal::Val;
 pub type EnvVal = internal::EnvVal<Env, RawVal>;
 pub type EnvObj = internal::EnvVal<Env, Object>;
 
+use crate::temp_data::TempData;
 use crate::{
     data::Data, deploy::Deployer, events::Events, ledger::Ledger, logging::Logger, Account,
     Address, Bytes, BytesN, Vec,
@@ -97,6 +98,12 @@ impl Env {
     pub fn data(&self) -> Data {
         Data::new(self)
     }
+
+    /// Get a [TempData] for accessing and updating temporary contract data.
+    #[inline(always)]
+    pub fn temp_data(&self) -> TempData {
+        TempData::new(self)
+    }    
 
     /// Get [Events] for publishing events associated with the
     /// currently executing contract.
