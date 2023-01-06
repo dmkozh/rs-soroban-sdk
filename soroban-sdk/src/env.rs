@@ -51,8 +51,8 @@ pub use internal::Val;
 
 use crate::temp_data::TempData;
 use crate::{
-        data::Data, deploy::Deployer, events::Events, ledger::Ledger, logging::Logger, Account,
-    Address, Bytes, BytesN, Vec,
+    crypto::Crypto, data::Data, deploy::Deployer, events::Events, ledger::Ledger, logging::Logger,
+    storage::Storage, Account, Address, Bytes, BytesN, Vec,
 };
 
 /// The [Env] type provides access to the environment the contract is executing
@@ -114,7 +114,7 @@ impl Env {
     #[inline(always)]
     pub fn temp_data(&self) -> TempData {
         TempData::new(self)
-    }    
+    }
 
     /// Get [Events] for publishing events associated with the
     /// currently executing contract.
@@ -275,7 +275,7 @@ impl Env {
 }
 
 #[cfg(any(test, feature = "testutils"))]
-use crate::testutils::{random, BytesN as _, ContractFunctionSet, Ledger as _};
+use crate::testutils::{budget::Budget, random, BytesN as _, ContractFunctionSet, Ledger as _};
 #[cfg(any(test, feature = "testutils"))]
 use soroban_ledger_snapshot::LedgerSnapshot;
 #[cfg(any(test, feature = "testutils"))]
@@ -310,18 +310,17 @@ impl Env {
 
         let rf = Rc::new(EmptySnapshotSource());
         let storage = internal::storage::Storage::with_recording_footprint(rf);
+        let budget = internal::budget::Budget::default();
         let env_impl = internal::EnvImpl::with_storage_and_budget(
             storage,
-            internal::budget::Budget::default(),
-internal::auth::AuthorizationManager::new_recording(budget),
+            budget.clone(),
+            internal::auth::AuthorizationManager::new_recording(budget),
         );
 
         let env = Env {
             env_impl,
             snapshot: None,
         };
-
-        env.set_source_account(&env.accounts().generate());
 
         env.ledger().set(internal::LedgerInfo {
             protocol_version: 0,
@@ -574,25 +573,6 @@ internal::auth::AuthorizationManager::new_recording(budget),
             .unwrap()
     }
 
-    /// Sets the source account in the [Env].
-    ///
-    /// The source account will be accessible via [Env::invoker] when a contract
-    /// is directly invoked.
-    pub fn set_source_account(&self, account_id: &AccountId) {
-        self.accounts().create(account_id);
-        self.env_impl
-            .set_source_account(account_id.try_into().unwrap());
-    }
-
-    /// Gets the source account set in the [Env].
-    pub fn source_account(&self) -> AccountId {
-        self.env_impl
-            .source_account()
-            .unwrap()
-            .try_into_val(self)
-            .unwrap()
-    }
-
     /// Run the function as if executed by the given contract ID.
     ///
     /// Used to write or read contract data, or take other actions in tests for
@@ -618,18 +598,17 @@ internal::auth::AuthorizationManager::new_recording(budget),
 
         let rs = Rc::new(s.clone());
         let storage = internal::storage::Storage::with_recording_footprint(rs.clone());
+        let budget = internal::budget::Budget::default();
         let env_impl = internal::EnvImpl::with_storage_and_budget(
             storage,
-            internal::budget::Budget::default(),
+            budget.clone(),
+            internal::auth::AuthorizationManager::new_recording(budget),
         );
 
         let env = Env {
             env_impl,
             snapshot: Some(rs.clone()),
         };
-
-        env.set_source_account(&env.accounts().generate());
-
         env.ledger().set(info);
 
         env

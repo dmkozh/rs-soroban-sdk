@@ -1,17 +1,22 @@
 use core::cmp::Ordering;
 
-use crate::env::internal::xdr::ScObjectType;
-use crate::{
-    Address, BytesN, ConversionError, IntoVal, Object, RawVal, TryFromVal, TryIntoVal, Vec,
+use super::{
+    env::internal::{Env as _, EnvBase as _},
+    env::IntoVal,
+    xdr::ScObjectType,
+    ConversionError, Env, Object, RawVal, TryFromVal, TryIntoVal,
 };
 
-use crate::{env::EnvObj, Env};
+use crate::{Address, BytesN, Vec};
 
 #[cfg(not(target_family = "wasm"))]
 use crate::env::internal::xdr::{Hash, ScAccount, ScAccountId, ScVal, ScVec};
 
 #[derive(Clone)]
-pub struct Account(EnvObj);
+pub struct Account {
+    env: Env,
+    obj: Object,
+}
 
 impl Eq for Account {}
 
@@ -29,16 +34,21 @@ impl PartialOrd for Account {
 
 impl Ord for Account {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.0.cmp(&other.0)
+        self.env.check_same_env(&other.env);
+        let v = self.env.obj_cmp(self.obj.to_raw(), other.obj.to_raw());
+        v.cmp(&0)
     }
 }
 
 impl TryFromVal<Env, Object> for Account {
     type Error = ConversionError;
 
-    fn try_from_val(env: &Env, val: Object) -> Result<Self, Self::Error> {
-        if val.is_obj_type(ScObjectType::Account) {
-            Ok(Account(val.in_env(env)))
+    fn try_from_val(env: &Env, obj: Object) -> Result<Self, Self::Error> {
+        if obj.is_obj_type(ScObjectType::Account) {
+            Ok(Account {
+                env: env.clone(),
+                obj,
+            })
         } else {
             Err(ConversionError {})
         }
@@ -97,7 +107,7 @@ impl IntoVal<Env, RawVal> for &Account {
 impl TryFrom<&Account> for ScVal {
     type Error = ConversionError;
     fn try_from(v: &Account) -> Result<Self, Self::Error> {
-        ScVal::try_from_val(&v.0.env, v.0.val.to_raw())
+        ScVal::try_from_val(&v.env, v.obj.to_raw())
     }
 }
 
@@ -129,36 +139,38 @@ impl TryIntoVal<Env, Account> for ScVal {
 }
 
 impl Account {
-    pub(crate) unsafe fn unchecked_new(obj: EnvObj) -> Self {
-        Self(obj)
+    #[inline(always)]
+    pub(crate) unsafe fn unchecked_new(env: Env, obj: Object) -> Self {
+        Self { env, obj }
     }
 
+    #[inline(always)]
     pub fn env(&self) -> &Env {
-        self.0.env()
-    }
-
-    pub fn address(&self) -> Address {
-        self.0.env().get_account_address(&self)
-    }
-
-    pub fn authorize(&self, args: Vec<RawVal>) {
-        self.0.env().authorize_account(&self, args);
+        &self.env
     }
 
     pub fn as_raw(&self) -> &RawVal {
-        self.0.as_raw()
-    }
-
-    pub fn as_object(&self) -> &Object {
-        self.0.as_object()
+        self.obj.as_raw()
     }
 
     pub fn to_raw(&self) -> RawVal {
-        self.0.to_raw()
+        self.obj.to_raw()
+    }
+
+    pub fn as_object(&self) -> &Object {
+        &self.obj
     }
 
     pub fn to_object(&self) -> Object {
-        self.0.to_object()
+        self.obj
+    }
+
+    pub fn address(&self) -> Address {
+        self.env.get_account_address(&self)
+    }
+
+    pub fn authorize(&self, args: Vec<RawVal>) {
+        self.env.authorize_account(&self, args);
     }
 }
 
