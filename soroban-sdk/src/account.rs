@@ -7,7 +7,10 @@ use super::{
     ConversionError, Env, Object, RawVal, TryFromVal, TryIntoVal,
 };
 
-use crate::{Address, BytesN, Vec};
+use crate::{Address, Vec};
+
+#[cfg(all(not(target_family = "wasm"), any(test, feature = "testutils")))]
+use crate::BytesN;
 
 #[cfg(not(target_family = "wasm"))]
 use crate::env::internal::xdr::{Hash, ScAccount, ScAccountId, ScVal, ScVec};

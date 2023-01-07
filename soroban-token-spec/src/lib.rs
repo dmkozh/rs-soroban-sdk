@@ -17,29 +17,31 @@ pub struct Token;
 #[contractimpl]
 #[allow(unused_variables)]
 impl Token {
-    /// Init creates a token contract that does not wrap an asset on the classic
-    /// side. No checks are done on the contractID.
-    pub fn init(env: Env, admin: Identifier, metadata: TokenMetadata) {
+    pub fn allowance(env: Env, from: Address, spender: Address) -> i128 {
         panic!("calling into interface");
     }
 
-    pub fn nonce(env: Env, id: Identifier) -> i128 {
+    pub fn incr_allow(env: Env, from: Account, spender: Address, amount: i128) {
         panic!("calling into interface");
     }
 
-    pub fn allowance(env: Env, from: Identifier, spender: Identifier) -> i128 {
+    pub fn decr_allow(env: Env, from: Account, spender: Address, amount: i128) {
         panic!("calling into interface");
     }
 
-    pub fn approve(env: Env, from: Signature, nonce: i128, spender: Identifier, amount: i128) {
+    pub fn balance(env: Env, id: Address) -> i128 {
         panic!("calling into interface");
     }
 
-    pub fn is_frozen(env: Env, id: Address) -> bool {
+    pub fn spendable(env: Env, id: Address) -> i128 {
         panic!("calling into interface");
     }
 
-    pub fn is_frozen(env: Env, id: Identifier) -> bool {
+    pub fn authorized(env: Env, id: Address) -> bool {
+        panic!("calling into interface");
+    }
+
+    pub fn xfer(env: Env, from: Account, to: Address, amount: i128) {
         panic!("calling into interface");
     }
 
@@ -47,27 +49,27 @@ impl Token {
         panic!("calling into interface");
     }
 
-    pub fn burn(env: Env, admin: Account, from: Address, amount: i128) {
+    pub fn burn(env: Env, from: Account, amount: i128) {
         panic!("calling into interface");
     }
 
-    pub fn burn(env: Env, admin: Signature, nonce: i128, from: Identifier, amount: i128) {
+    pub fn burn_from(env: Env, spender: Account, from: Address, amount: i128) {
         panic!("calling into interface");
     }
 
-    pub fn freeze(env: Env, admin: Signature, nonce: i128, id: Identifier) {
+    pub fn set_auth(env: Env, admin: Account, id: Address, authorize: bool) {
+        panic!("calling into interface");
+    }
+
+    pub fn mint(env: Env, admin: Account, to: Address, amount: i128) {
+        panic!("calling into interface");
+    }
+
+    pub fn clawback(env: Env, admin: Account, from: Address, amount: i128) {
         panic!("calling into interface");
     }
 
     pub fn set_admin(env: Env, admin: Account, new_admin: Address) {
-        panic!("calling into interface");
-    }
-
-    pub fn set_admin(env: Env, admin: Signature, nonce: i128, new_admin: Identifier) {
-        panic!("calling into interface");
-    }
-
-    pub fn unfreeze(env: Env, admin: Signature, nonce: i128, id: Identifier) {
         panic!("calling into interface");
     }
 
@@ -82,17 +84,9 @@ impl Token {
     pub fn symbol(env: Env) -> Bytes {
         panic!("calling into interface");
     }
-
-    pub fn import(env: Env, id: Signature, nonce: i128, amount: i64) {
-        panic!("calling into interface");
-    }
-
-    pub fn export(env: Env, id: Signature, nonce: i128, amount: i64) {
-        panic!("calling into interface");
-    }
 }
 
-const SPEC_SIZE: usize = 984;
+const SPEC_SIZE: usize = 944;
 
 /// Returns the XDR spec for the Token contract.
 #[doc(hidden)]

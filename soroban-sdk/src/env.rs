@@ -51,7 +51,7 @@ pub use internal::Val;
 
 use crate::temp_data::TempData;
 use crate::{
-    crypto::Crypto, data::Data, deploy::Deployer, events::Events, ledger::Ledger, logging::Logger,
+    crypto::Crypto, deploy::Deployer, events::Events, ledger::Ledger, logging::Logger,
     storage::Storage, Account, Address, Bytes, BytesN, Vec,
 };
 

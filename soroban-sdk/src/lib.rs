@@ -616,7 +616,6 @@ pub mod data {
     #[deprecated(note = "use storage::Storage")]
     pub use super::storage::Storage as Data;
 }
-pub mod temp_data;
 mod bytes;
 pub mod crypto;
 pub mod deploy;
@@ -627,6 +626,7 @@ pub mod logging;
 mod map;
 mod set;
 pub mod storage;
+pub mod temp_data;
 mod vec;
 pub use account::Account;
 pub use address::Address;

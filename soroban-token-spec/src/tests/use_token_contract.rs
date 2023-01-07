@@ -30,15 +30,16 @@ impl TestContract {
         get_token(&e)
     }
 
-    pub fn mint(e: Env, to: Address, amount: i128) {
-        TokenClient::new(&e, get_token(&e)).mint(&e.current_contract_account(), &to, &amount);
+    pub fn incr_allow(e: Env, acc: Account, spender: Address, amount: i128) {
+        TokenClient::new(&e, get_token(&e)).incr_allow(&acc, &spender, &amount);
     }
 
-    pub fn set_admin(e: Env, new_admin: Address) {
-        TokenClient::new(&e, get_token(&e)).set_admin(&e.current_contract_account(), &new_admin);
+    pub fn allowance(e: Env, from: Address, spender: Address) -> i128 {
+        TokenClient::new(&e, get_token(&e)).allowance(&from, &spender)
     }
 }
 
+#[test]
 fn test() {
     use soroban_sdk::xdr::Asset;
 
@@ -46,8 +47,7 @@ fn test() {
 
     let token_contract_id = env.register_stellar_asset_contract(Asset::Native);
 
-    let contract_id = BytesN::from_array(&env, &[0; 32]);
-    env.register_contract(&contract_id, TestContract);
+    let contract_id = env.register_contract(None, TestContract);
     let client = TestContractClient::new(&env, &contract_id);
     client.init(&token_contract_id);
 
@@ -55,31 +55,27 @@ fn test() {
     assert_eq!(token_client.name(), "native".into_val(&env));
 
     let acc = Account::random(&env);
+    let spender = Account::random(&env).address();
+    client.incr_allow(&acc, &spender, &20);
 
-    client.mint(&acc.address(), &10);
-    assert_eq!(token_client.balance(&acc.address()), 10);
-
-    // transfer admin
-    client.set_admin(&acc.address());
-
-    token_client.mint(&acc, &acc.address(), &20);
     // Smoke test check that authorization with wrong args didn't happen.
     assert!(!env.verify_account_authorization(
         &acc,
-        &[(&token_client.contract_id, "mint")],
-        (acc.address(), 19_i128).into_val(&env),
+        &[(&token_client.contract_id, "incr_allow")],
+        (&spender, 19_i128).into_val(&env),
     ));
     assert!(env.verify_account_authorization(
         &acc,
-        &[(&token_client.contract_id, "mint")],
-        (acc.address(), 20_i128).into_val(&env),
+        &[(&token_client.contract_id, "incr_allow")],
+        (&spender, 20_i128).into_val(&env),
     ));
     // Smoke test check that double authorization didn't happen.
     assert!(!env.verify_account_authorization(
         &acc,
-        &[(&token_client.contract_id, "mint")],
-        (acc.address(), 20_i128).into_val(&env),
+        &[(&token_client.contract_id, "incr_allow")],
+        (&spender, 20_i128).into_val(&env),
     ));
 
-    assert_eq!(token_client.balance(&acc.address()), 30);
+    assert_eq!(client.allowance(&acc.address(), &spender), 20);
+    assert_eq!(token_client.allowance(&acc.address(), &spender), 20);
 }
