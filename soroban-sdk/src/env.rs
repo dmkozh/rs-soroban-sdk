@@ -446,6 +446,27 @@ impl Env {
             .unwrap()
     }
 
+    /// Register the built-in Stellar Asset Contract with provided issuer and
+    /// random asset code.
+    pub fn register_stellar_asset_contract_with_admin(&self, admin: Address) -> BytesN<32> {
+        let issuer_id =
+            xdr::AccountId(xdr::PublicKey::PublicKeyTypeEd25519(xdr::Uint256(random())));
+        let asset = xdr::Asset::CreditAlphanum4(xdr::AlphaNum4 {
+            asset_code: xdr::AssetCode4(random()),
+            issuer: issuer_id.clone(),
+        });
+
+        let token_id = self.register_stellar_asset_contract(asset);
+        let issuer_acc = Account::from_classic(self, &issuer_id);
+        let _: () = self.invoke_contract(
+            &token_id,
+            &Symbol::from_str("set_admin"),
+            crate::vec![self, issuer_acc.into_val(self), admin.into_val(self)],
+        );
+
+        token_id
+    }
+
     fn register_contract_with_optional_contract_id_and_source<'a>(
         &self,
         contract_id: impl Into<Option<&'a BytesN<32>>>,

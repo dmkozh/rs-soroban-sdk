@@ -969,7 +969,6 @@ dependencies = [
 name = "soroban-token-spec"
 version = "0.4.1"
 dependencies = [
- "ed25519-dalek",
  "rand 0.7.3",
  "soroban-sdk",
 ]

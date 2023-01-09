@@ -190,6 +190,16 @@ impl Account {
         Account::try_from_val(e, ScVal::Object(Some(ScObject::Account(sc_account)))).unwrap()
     }
 
+    pub fn from_classic(e: &Env, account_id: &crate::env::internal::xdr::AccountId) -> Self {
+        use crate::env::internal::xdr::ScObject;
+        let sc_account = ScAccount {
+            account_id: ScAccountId::BuiltinClassicAccount(account_id.clone()),
+            invocations: vec![].try_into().unwrap(),
+            signature_args: ScVec(vec![].try_into().unwrap()),
+        };
+        Account::try_from_val(e, ScVal::Object(Some(ScObject::Account(sc_account)))).unwrap()
+    }
+
     pub fn generic(e: &Env, contract_id: &BytesN<32>) -> Self {
         use crate::env::internal::xdr::ScObject;
         let sc_account = ScAccount {
