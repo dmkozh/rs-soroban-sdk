@@ -439,6 +439,7 @@ impl Env {
         contract_id: impl Into<Option<&'a BytesN<32>>>,
         contract: T,
     ) -> BytesN<32> {
+        extern crate std;
         struct InternalContractFunctionSet<T: ContractFunctionSet>(pub(crate) T);
         impl<T: ContractFunctionSet> internal::ContractFunctionSet for InternalContractFunctionSet<T> {
             fn call(
@@ -448,6 +449,17 @@ impl Env {
                 args: &[RawVal],
             ) -> Option<RawVal> {
                 self.0.call(func, Env::with_impl(env_impl.clone()), args)
+            }
+
+            fn special_functions(&self) -> std::vec::Vec<xdr::ScEnvSpecialFn> {
+                self.0
+                    .special_functions()
+                    .iter()
+                    .map(|(fn_type, fn_name)| xdr::ScEnvSpecialFn {
+                        fn_type: fn_type.clone(),
+                        name: (*fn_name).try_into().unwrap(),
+                    })
+                    .collect()
             }
         }
 
@@ -527,7 +539,7 @@ impl Env {
                             account_id: issuer_id.clone(),
                             balance: 0,
                             flags: 0,
-                            home_domain: xdr::StringM::default(),
+                            home_domain: Default::default(),
                             inflation_dest: None,
                             num_sub_entries: 0,
                             seq_num: xdr::SequenceNumber(0),

@@ -4,7 +4,7 @@ use stellar_xdr::{ReadXdr, ScSpecEntry, ScSpecFunctionInputV0, ScSpecFunctionV0,
 
 pub struct Contract;
 
-#[contractimpl]
+#[contractimpl(custom_account_check_auth_fn = "add")]
 impl Contract {
     pub fn add(a: i32, b: i32) -> i32 {
         a + b

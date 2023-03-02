@@ -16,7 +16,7 @@ use derive_client::derive_client;
 use derive_enum::derive_type_enum;
 use derive_enum_int::derive_type_enum_int;
 use derive_error_enum_int::derive_type_error_enum_int;
-use derive_fn::{derive_contract_function_set, derive_fn};
+use derive_fn::{derive_contract_function_set, derive_fn, derive_special_fn_spec, get_special_fns};
 use derive_struct::derive_type_struct;
 use derive_struct_tuple::derive_type_struct_tuple;
 
@@ -26,6 +26,7 @@ use proc_macro2::{Literal, Span, TokenStream as TokenStream2};
 use quote::quote;
 use sha2::{Digest, Sha256};
 use std::fs;
+use stellar_xdr::{ScEnvSpecialFn, ScSymbol};
 use syn::{
     parse_macro_input, parse_str, spanned::Spanned, AttributeArgs, Data, DeriveInput, Error,
     Fields, ItemImpl, LitStr, Path, Type, Visibility,
@@ -56,8 +57,25 @@ pub fn symbol(input: TokenStream) -> TokenStream {
     }
 }
 
+#[derive(Debug, FromMeta, Default)]
+struct ContractImplArgs {
+    #[darling(default)]
+    custom_account_check_auth_fn: Option<String>,
+}
+
 #[proc_macro_attribute]
-pub fn contractimpl(_metadata: TokenStream, input: TokenStream) -> TokenStream {
+pub fn contractimpl(metadata: TokenStream, input: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(metadata as AttributeArgs);
+    // Don't try parsing when args are empty, in order to allow `[contractimpl]`
+    // syntax (without parentheses).
+    let args = if !args.is_empty() {
+        match ContractImplArgs::from_list(&args) {
+            Ok(v) => v,
+            Err(e) => return e.write_errors().into(),
+        }
+    } else {
+        ContractImplArgs::default()
+    };
     let imp = parse_macro_input!(input as ItemImpl);
     let ty = &imp.self_ty;
 
@@ -74,12 +92,17 @@ pub fn contractimpl(_metadata: TokenStream, input: TokenStream) -> TokenStream {
     .unwrap_or_else(|| "Client".to_string());
 
     let pub_methods: Vec<_> = syn_ext::impl_pub_methods(&imp).collect();
-    let derived: Result<proc_macro2::TokenStream, proc_macro2::TokenStream> = pub_methods
+    let special_fns = get_special_fns(&args.custom_account_check_auth_fn);
+    // Get the special function mapping without any validation first and check
+    // if all of them are present in the exposed contract functions.
+    let mut missing_special_fns = special_fns.clone();
+    let mut derived: Result<proc_macro2::TokenStream, proc_macro2::TokenStream> = pub_methods
         .iter()
         .map(|m| {
             let ident = &m.sig.ident;
             let call = quote! { <super::#ty>::#ident };
             let trait_ident = imp.trait_.as_ref().and_then(|x| x.1.get_ident());
+            missing_special_fns.remove(&ident.to_string());
             derive_fn(
                 &call,
                 ty,
@@ -92,14 +115,31 @@ pub fn contractimpl(_metadata: TokenStream, input: TokenStream) -> TokenStream {
             )
         })
         .collect();
+    if let Some(missing_fn) = missing_special_fns.keys().next() {
+        let err = Error::new(imp.span(), format!("Function not found: {}", missing_fn))
+            .to_compile_error();
+        derived = Err(quote! { #err });
+    }
 
+    // Now that we're sure that every special function exists among the contract
+    // functions we can safely convert them to `ScEnvSpecialFn` with `unwrap()`
+    // (as at this point all the function names must be valid).
+    let special_fns = special_fns
+        .iter()
+        .map(|(fn_name, fn_type)| ScEnvSpecialFn {
+            fn_type: fn_type.clone(),
+            name: ScSymbol(fn_name.try_into().unwrap()),
+        })
+        .collect::<Vec<_>>();
     match derived {
         Ok(derived_ok) => {
-            let cfs = derive_contract_function_set(ty, pub_methods.into_iter());
+            let cfs = derive_contract_function_set(ty, pub_methods.into_iter(), &special_fns);
+            let special_fns_spec = derive_special_fn_spec(ty, &special_fns);
             quote! {
                 #[soroban_sdk::contractclient(name = #client_ident)]
                 #imp
                 #derived_ok
+                #special_fns_spec
                 #cfs
             }
             .into()

@@ -5,6 +5,7 @@
 
 mod sign;
 
+use crate::xdr::ScEnvSpecialFnType;
 pub use sign::ed25519;
 
 use crate::{Env, RawVal, Symbol, Vec};
@@ -12,6 +13,7 @@ use crate::{Env, RawVal, Symbol, Vec};
 #[doc(hidden)]
 pub trait ContractFunctionSet {
     fn call(&self, func: &Symbol, env: Env, args: &[RawVal]) -> Option<RawVal>;
+    fn special_functions(&self) -> &[(ScEnvSpecialFnType, &'static str)];
 }
 
 #[doc(inline)]

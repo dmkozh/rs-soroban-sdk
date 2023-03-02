@@ -1,8 +1,11 @@
+use std::collections::HashMap;
+
 use itertools::MultiUnzip;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use stellar_xdr::{
-    ScSpecEntry, ScSpecFunctionInputV0, ScSpecFunctionV0, ScSpecTypeDef, StringM, VecM, WriteXdr,
+    ScEnvMetaEntry, ScEnvSpecialFn, ScEnvSpecialFnType, ScSpecEntry, ScSpecFunctionInputV0,
+    ScSpecFunctionV0, ScSpecTypeDef, ScSymbol, StringM, VecM, WriteXdr,
 };
 use syn::{
     punctuated::Punctuated,
@@ -147,7 +150,7 @@ pub fn derive_fn(
     // Generated code spec.
     let spec_entry = ScSpecEntry::FunctionV0(ScSpecFunctionV0 {
         doc: docs_from_attrs(attrs).try_into().unwrap(), // TODO: Truncate docs, or display friendly compile error.
-        name: wrap_export_name.try_into().unwrap_or_else(|_| {
+        name: wrap_export_name.as_str().try_into().unwrap_or_else(|_| {
             const MAX: u32 = 10;
             errors.push(Error::new(
                 ident.span(),
@@ -156,7 +159,7 @@ pub fn derive_fn(
                     MAX,
                 ),
             ));
-            StringM::<MAX>::default()
+            ScSymbol::default()
         }),
         inputs: spec_args.try_into().unwrap_or_else(|_| {
             const MAX: u32 = 10;
@@ -234,6 +237,7 @@ pub fn derive_fn(
 pub fn derive_contract_function_set<'a>(
     ty: &Type,
     methods: impl Iterator<Item = &'a syn::ImplItemMethod>,
+    special_fns: &Vec<ScEnvSpecialFn>,
 ) -> TokenStream2 {
     let (idents, wrap_idents, attrs): (Vec<_>, Vec<_>, Vec<_>) = methods
         .map(|m| {
@@ -248,6 +252,24 @@ pub fn derive_contract_function_set<'a>(
             (ident, wrap_ident, attrs)
         })
         .multiunzip();
+    let (special_fn_types, special_fn_names): (Vec<_>, Vec<_>) = special_fns
+        .iter()
+        .map(|f| {
+            (
+                syn::parse_str::<syn::Expr>(
+                    format!(
+                        "soroban_sdk::xdr::ScEnvSpecialFnType::{}",
+                        f.fn_type.to_string()
+                    )
+                    .as_str(),
+                )
+                .unwrap(),
+                format!("{}", f.name.0.to_string_lossy().as_str()),
+            )
+        })
+        .multiunzip();
+    let ty_str = quote! {#ty}.to_string().to_uppercase();
+    let special_fns_const_ident = format_ident!("__SPECIAL_FUNCTIONS_{}", ty_str);
     quote! {
         #[cfg(any(test, feature = "testutils"))]
         impl soroban_sdk::testutils::ContractFunctionSet for #ty {
@@ -270,6 +292,50 @@ pub fn derive_contract_function_set<'a>(
                     }
                 }
             }
+
+            fn special_functions(&self) -> &[(soroban_sdk::xdr::ScEnvSpecialFnType, &'static str)] {
+                #special_fns_const_ident
+            }
         }
+
+        #[cfg(any(test, feature = "testutils"))]
+        const #special_fns_const_ident: &[(soroban_sdk::xdr::ScEnvSpecialFnType, &'static str)] = &[
+            #(
+                (
+                    #special_fn_types,
+                    #special_fn_names
+                ),
+            )*
+        ];
     }
+}
+
+pub fn derive_special_fn_spec(ty: &Type, special_fns: &Vec<ScEnvSpecialFn>) -> TokenStream2 {
+    if special_fns.is_empty() {
+        return quote!();
+    }
+
+    let env_meta = ScEnvMetaEntry::SpecialFunctions(special_fns.try_into().unwrap());
+    let env_meta_xdr = env_meta.to_xdr().unwrap();
+    let env_meta_xdr_len = env_meta_xdr.len();
+    let env_meta_xdr_lit = proc_macro2::Literal::byte_string(env_meta_xdr.as_slice());
+    let ty_str = quote! {#ty}.to_string().to_uppercase();
+    let env_meta_ident = format_ident!("__ENV_META_SPECIAL_FNS_XDR_{}", ty_str);
+    quote! {
+        #[cfg_attr(target_family = "wasm", link_section = "contractenvmetav0")]
+        pub static #env_meta_ident: [u8; #env_meta_xdr_len] = *#env_meta_xdr_lit;
+    }
+}
+
+pub fn get_special_fns(
+    custom_account_check_auth_fn: &Option<String>,
+) -> HashMap<String, ScEnvSpecialFnType> {
+    let mut res = HashMap::new();
+    if let Some(f) = custom_account_check_auth_fn {
+        res.insert(
+            f.clone(),
+            ScEnvSpecialFnType::ScEnvSpecialFnTypeCustomAccountCheckAuth,
+        );
+    }
+    res
 }
