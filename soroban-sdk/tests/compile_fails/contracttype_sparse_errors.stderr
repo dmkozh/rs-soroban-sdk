@@ -1,0 +1,17 @@
+error: sparse = true is not supported for tuple structs, it is only supported for structs with named fields
+ --> tests/compile_fails/contracttype_sparse_errors.rs:4:23
+  |
+4 | pub struct TupleStruct(pub u32);
+  |                       ^^^^^^^^^
+
+error: sparse = true is not supported for enums, it is only supported for structs with named fields
+ --> tests/compile_fails/contracttype_sparse_errors.rs:7:5
+  |
+7 | pub enum UnitEnum {
+  |     ^^^^
+
+error: sparse = true is not supported for contract errors, it is only supported for contract types that are structs with named fields
+  --> tests/compile_fails/contracttype_sparse_errors.rs:14:10
+   |
+14 | pub enum Error {
+   |          ^^^^^

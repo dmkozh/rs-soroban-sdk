@@ -657,6 +657,42 @@ pub use soroban_sdk_macros::contractmeta;
 /// deprecation warning at the macro call site; it will be removed in a future
 /// release. See [`_features`] for details.
 ///
+/// ### Schema evolution and the `sparse` argument
+///
+/// Structs with named fields are stored as a map keyed by the field names.
+/// Reading such a map into a struct is tolerant of schema differences:
+/// - A key present in the map but absent from the struct is ignored.
+/// - A field of the struct that is absent from the map is read as `Void`, which
+/// converts to `None` for `Option` fields, and is a conversion error for any
+/// other field type.
+///
+/// This makes it possible to evolve a struct after it has been stored or after
+/// it has been used at a contract boundary, by adding new fields as `Option`, or
+/// by removing fields that are no longer read.
+///
+/// By default writing a struct always writes every field, including fields whose
+/// value is `None`. Setting `sparse = true` omits those fields from the map
+/// instead, which makes the stored map smaller when a struct has many `Option`
+/// fields that are commonly `None`:
+///
+/// ```
+/// # use soroban_sdk::contracttype;
+/// #[contracttype(sparse = true)]
+/// #[derive(Clone, Debug, Eq, PartialEq)]
+/// pub struct Config {
+///     pub owner: u32,
+///     pub max_fee: Option<u32>,
+///     pub min_fee: Option<u32>,
+/// }
+/// ```
+///
+/// A `Config { owner: 1, max_fee: None, min_fee: None }` is stored as the map
+/// `{owner: 1}` rather than `{max_fee: (), min_fee: (), owner: 1}`. Both forms
+/// read back into the same value, so `sparse = true` can be enabled or disabled
+/// for an existing struct without invalidating already-stored data.
+///
+/// `sparse = true` is only supported for structs with named fields.
+///
 /// ### Examples
 ///
 /// Defining a contract type that is a struct and use it in a contract.

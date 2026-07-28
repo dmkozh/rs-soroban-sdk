@@ -96,11 +96,8 @@ fn test_out_of_order_functional() {
     );
 }
 
-// TODO: at present UDT try_from_vals actually trap rather than returning
-// catchable errors. This is intentional to minimize code size. Can revisit.
 #[test]
-#[should_panic]
-fn test_error_on_partial_decode() {
+fn test_partial_decode() {
     let env = Env::default();
 
     // Success case, a map will decode to a Udt if the symbol keys match the
@@ -110,9 +107,9 @@ fn test_error_on_partial_decode() {
     assert_eq!(udt, Ok(Udt { a: 5, b: 7 }));
 
     // If a struct has fields a, b, and a map is decoded into it where the map
-    // has fields a, b, and c, it is an error. It is an error because decoding
-    // and encoding will not round trip the data, and therefore partial decoding
-    // is relatively difficult to use safely.
+    // has fields a, b, and c, the extra key c is ignored. Ignoring extra keys is
+    // what allows a field to be removed from a struct without invalidating data
+    // that was written by an earlier version of the struct.
     let map = map![
         &env,
         (symbol_short!("a"), 5),
@@ -120,6 +117,17 @@ fn test_error_on_partial_decode() {
         (symbol_short!("c"), 9)
     ]
     .to_val();
+    let udt = Udt::try_from_val(&env, &map);
+    assert_eq!(udt, Ok(Udt { a: 5, b: 7 }));
+}
+
+#[test]
+fn test_error_on_missing_non_option_field() {
+    let env = Env::default();
+
+    // A field that is absent from the map decodes as Void, which is not
+    // convertible to i32, so decoding fails.
+    let map = map![&env, (symbol_short!("a"), 5)].to_val();
     let udt = Udt::try_from_val(&env, &map);
     assert_eq!(udt, Err(ConversionError));
 }

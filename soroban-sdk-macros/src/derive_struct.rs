@@ -21,6 +21,7 @@ pub fn derive_type_struct(
     data: &DataStruct,
     spec: bool,
     lib: &Option<String>,
+    sparse: bool,
 ) -> TokenStream2 {
     // Collect errors as they are encountered and emit them at the end.
     let mut errors = Vec::<Error>::new();
@@ -50,11 +51,16 @@ pub fn derive_type_struct(
                     }
                 },
             };
+            // Mirrors the sparse semantics of `sparse_map_unpack_to_slice` used
+            // by the `Val` conversion: an absent key reads as `Void`, and any
+            // key in the map that isn't a field of the struct is ignored.
             let try_from_xdr = quote! {
                 #field_ident: {
                     let key: #path::xdr::ScVal = #path::xdr::ScSymbol(#field_name.try_into().map_err(|_| #path::xdr::Error::Invalid)?).into();
-                    let idx = map.binary_search_by_key(&key, |entry| entry.key.clone()).map_err(|_| #path::xdr::Error::Invalid)?;
-                    let rv: #path::Val = (&map[idx].val.clone()).try_into_val(env).map_err(|_| #path::xdr::Error::Invalid)?;
+                    let rv: #path::Val = match map.binary_search_by_key(&key, |entry| entry.key.clone()) {
+                        Ok(idx) => (&map[idx].val.clone()).try_into_val(env).map_err(|_| #path::xdr::Error::Invalid)?,
+                        Err(_) => #path::Val::VOID.to_val(),
+                    };
                     rv.try_into_val(env).map_err(|_| #path::xdr::Error::Invalid)?
                 }
             };
@@ -127,6 +133,25 @@ pub fn derive_type_struct(
         None
     };
 
+    // When `sparse` is set the map is built with `sparse_map_new_from_slices`,
+    // which omits any field whose value is `Void` (i.e. `Option::None`) from the
+    // map. Otherwise every field is always present in the map.
+    let map_new_fn = if sparse {
+        quote! { sparse_map_new_from_slices }
+    } else {
+        quote! { map_new_from_slices }
+    };
+    // Matching filter for the testutils-only `ScMap` conversion, so that the XDR
+    // form of a sparse struct is the same as its host `Map` form.
+    let sc_map_entries_filter = if sparse {
+        quote! {
+            let mut entries = entries;
+            entries.retain(|entry| !matches!(entry.val, #path::xdr::ScVal::Void));
+        }
+    } else {
+        quote! {}
+    };
+
     // Output.
     let mut output = quote! {
         #spec_gen
@@ -140,7 +165,7 @@ pub fn derive_type_struct(
                 const KEYS: [&'static str; #field_count_usize] = [#(#field_names),*];
                 let mut vals: [Val; #field_count_usize] = [Val::VOID.to_val(); #field_count_usize];
                 let map: MapObject = val.try_into().map_err(|_| ConversionError)?;
-                env.map_unpack_to_slice(map, &KEYS, &mut vals).map_err(|_| ConversionError)?;
+                env.sparse_map_unpack_to_slice(map, &KEYS, &mut vals).map_err(|_| ConversionError)?;
                 Ok(Self {
                     #(#field_idents: vals[#field_idx_lits].try_into_val(env).map_err(|_| #path::ConversionError)?,)*
                 })
@@ -155,7 +180,7 @@ pub fn derive_type_struct(
                 let vals: [Val; #field_count_usize] = [
                     #((&val.#field_idents).try_into_val(env).map_err(|_| ConversionError)?),*
                 ];
-                Ok(env.map_new_from_slices(&KEYS, &vals).map_err(|_| ConversionError)?.into())
+                Ok(env.#map_new_fn(&KEYS, &vals).map_err(|_| ConversionError)?.into())
             }
         }
 
@@ -179,9 +204,6 @@ pub fn derive_type_struct(
                     use #path::xdr::Validate;
                     use #path::TryIntoVal;
                     let map = val;
-                    if map.len() != #field_count_usize {
-                        return Err(#path::xdr::Error::Invalid);
-                    }
                     map.validate()?;
                     Ok(Self{
                         #(#try_from_xdrs,)*
@@ -207,9 +229,11 @@ pub fn derive_type_struct(
                 fn try_from(val: &#ident) -> Result<Self, #path::xdr::Error> {
                     extern crate alloc;
                     use #path::TryFromVal;
-                    #path::xdr::ScMap::sorted_from(alloc::vec![
+                    let entries: alloc::vec::Vec<#path::xdr::ScMapEntry> = alloc::vec![
                         #(#try_into_xdrs,)*
-                    ])
+                    ];
+                    #sc_map_entries_filter
+                    #path::xdr::ScMap::sorted_from(entries)
                 }
             }
 

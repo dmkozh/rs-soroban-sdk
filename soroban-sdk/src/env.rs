@@ -80,6 +80,7 @@ pub use internal::ContractTtlExtension;
 pub use internal::ConversionError;
 pub use internal::EnvBase;
 pub use internal::Error;
+pub use internal::ExecutableTagObject;
 pub use internal::MapObject;
 pub use internal::SymbolStr;
 pub use internal::TryFromVal;
@@ -2204,6 +2205,29 @@ impl internal::EnvBase for Env {
         Ok(self
             .env_impl
             .map_unpack_to_slice(map, keys, vals)
+            .unwrap_optimized())
+    }
+
+    fn sparse_map_new_from_slices(
+        &self,
+        keys: &[&str],
+        vals: &[Val],
+    ) -> Result<MapObject, Self::Error> {
+        Ok(self
+            .env_impl
+            .sparse_map_new_from_slices(keys, vals)
+            .unwrap_optimized())
+    }
+
+    fn sparse_map_unpack_to_slice(
+        &self,
+        map: MapObject,
+        keys: &[&str],
+        vals: &mut [Val],
+    ) -> Result<Void, Self::Error> {
+        Ok(self
+            .env_impl
+            .sparse_map_unpack_to_slice(map, keys, vals)
             .unwrap_optimized())
     }
 

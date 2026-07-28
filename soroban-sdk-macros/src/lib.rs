@@ -433,6 +433,12 @@ struct ContractTypeArgs {
     crate_path: Path,
     lib: Option<String>,
     export: Option<bool>,
+    /// When set on a struct with named fields, the struct is stored as a sparse
+    /// map: fields whose value is `Void` (i.e. `Option::None`) are omitted from
+    /// the map entirely, instead of being stored as explicit `Void` entries.
+    ///
+    /// Reading a struct is always sparse-tolerant, regardless of this option.
+    sparse: Option<bool>,
 }
 
 #[proc_macro_attribute]
@@ -467,11 +473,29 @@ pub fn contracttype(metadata: TokenStream, input: TokenStream) -> TokenStream {
     } else {
         matches!(input.vis, Visibility::Public(_))
     };
+    // `sparse` only affects the map that a struct with named fields is stored
+    // as, so reject it everywhere else rather than silently ignoring it.
+    let sparse = args.sparse.unwrap_or(false);
+    let sparse_unsupported = |span: Span, kind: &str| {
+        Error::new(
+            span,
+            format!("sparse = true is not supported for {kind}, it is only supported for structs with named fields"),
+        )
+        .to_compile_error()
+    };
     let derived = match &input.data {
         Data::Struct(s) => match s.fields {
-            Fields::Named(_) => {
-                derive_type_struct(&args.crate_path, vis, ident, attrs, s, gen_spec, &args.lib)
-            }
+            Fields::Named(_) => derive_type_struct(
+                &args.crate_path,
+                vis,
+                ident,
+                attrs,
+                s,
+                gen_spec,
+                &args.lib,
+                sparse,
+            ),
+            Fields::Unnamed(_) if sparse => sparse_unsupported(s.fields.span(), "tuple structs"),
             Fields::Unnamed(_) => derive_type_struct_tuple(
                 &args.crate_path,
                 vis,
@@ -487,6 +511,7 @@ pub fn contracttype(metadata: TokenStream, input: TokenStream) -> TokenStream {
             )
             .to_compile_error(),
         },
+        Data::Enum(e) if sparse => sparse_unsupported(e.enum_token.span(), "enums"),
         Data::Enum(e) => {
             let count_of_variants = e.variants.len();
             let count_of_int_variants = e
@@ -532,6 +557,14 @@ pub fn contracterror(metadata: TokenStream, input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let ident = &input.ident;
     let attrs = &input.attrs;
+    if args.sparse.is_some() {
+        return Error::new(
+            ident.span(),
+            "sparse = true is not supported for contract errors, it is only supported for contract types that are structs with named fields",
+        )
+        .to_compile_error()
+        .into();
+    }
     let export_deprecation = export_arg_v2_deprecation(&args.export, ident);
     // Under `experimental_spec_shaking_v2` the spec is always emitted and
     // reachability determines what is retained, so the `export` argument is
